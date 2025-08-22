@@ -1,9 +1,12 @@
 #!/bin/bash
 
-# Setup LXC Keepalive script and systemd service
+# Setup LXC Keepalive script and systemd service interactively
 
 KEEPALIVE_PATH="/usr/local/bin/lxc_keepalive.sh"
 SERVICE_PATH="/etc/systemd/system/lxc_keepalive.service"
+
+echo "Please enter the LXC container IDs you want to keep alive (separated by spaces):"
+read -r LXC_IDS
 
 echo "Creating keepalive script at $KEEPALIVE_PATH..."
 
@@ -31,7 +34,7 @@ function start_monitoring() {
   ( 
     while true; do
       for LXC_ID in "${LXC_LIST[@]}"; do
-        STATUS=$(pct status $LXC_ID 2>/dev/null | grep status | awk '\''{print $2}'\'')
+        STATUS=$(pct status $LXC_ID 2>/dev/null | grep status | awk '{print $2}')
         if [ "$STATUS" != "running" ]; then
           echo "$(date): Container $LXC_ID is not running. Starting it..."
           pct start $LXC_ID
@@ -105,7 +108,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$KEEPALIVE_PATH start 101 102 103
+ExecStart=$KEEPALIVE_PATH start $LXC_IDS
 ExecStop=$KEEPALIVE_PATH stop
 Restart=always
 User=root
@@ -123,7 +126,7 @@ echo "Enabling and starting lxc_keepalive.service..."
 systemctl enable lxc_keepalive.service
 systemctl start lxc_keepalive.service
 
-echo "Setup complete! The keepalive service is running for containers: 101 102 103"
+echo "Setup complete! The keepalive service is running for containers: $LXC_IDS"
 echo "To change containers, edit $SERVICE_PATH and run:"
 echo "  systemctl daemon-reload"
 echo "  systemctl restart lxc_keepalive.service"
