@@ -1,27 +1,5 @@
-Proxmox LXC Keepalive Service
+# Proxmox LXC Keepalive Service
 
-You can download the keepalive script directly from GitHub:
-
-- Using wget:
-```
-wget https://raw.githubusercontent.com/your-user/your-repo/main/lxc_keepalive.sh -O /usr/local/bin/lxc_keepalive.sh
-chmod +x /usr/local/bin/lxc_keepalive.sh
-```
-- Using curl:
-```
-curl -o /usr/local/bin/lxc_keepalive.sh https://raw.githubusercontent.com/your-user/your-repo/main/lxc_keepalive.sh
-chmod +x /usr/local/bin/lxc_keepalive.sh
-```
-- Or clone the entire repository:
-```
-git clone https://github.com/your-user/your-repo.git
-cd your-repo
-```
-### Copy or move lxc_keepalive.sh to /usr/local/bin
-```
-cp lxc_keepalive.sh /usr/local/bin/
-chmod +x /usr/local/bin/lxc_keepalive.sh
-```
 ---
 
 ## Features
@@ -36,11 +14,28 @@ chmod +x /usr/local/bin/lxc_keepalive.sh
 
 ## Installation
 
-1. Run the provided setup script to install the keepalive script, create the config file, and enable the systemd service:
+You can download the keepalive script directly from GitHub:
+
+- Using wget:
 ```
-sudo ./setup_lxc_keepalive.sh
+wget https://raw.githubusercontent.com/cryptshoe/lxc-keepalive/main/lxc_keepalive.sh -O /usr/local/bin/lxc_keepalive.sh
+chmod +x /usr/local/bin/lxc_keepalive.sh
 ```
-You will be prompted to enter the container IDs to monitor (space-separated).
+- Using curl:
+```
+curl -o /usr/local/bin/lxc_keepalive.sh https://raw.githubusercontent.com/cryptshoe/lxc-keepalive/main/lxc_keepalive.sh
+chmod +x /usr/local/bin/lxc_keepalive.sh
+```
+- Or clone the entire repository:
+```
+git clone https://github.com/your-user/your-repo.git
+cd your-repo
+```
+Copy or move lxc_keepalive.sh to /usr/local/bin
+```
+cp lxc_keepalive.sh /usr/local/bin/
+chmod +x /usr/local/bin/lxc_keepalive.sh
+```
 
 ---
 
