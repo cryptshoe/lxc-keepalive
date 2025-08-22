@@ -1,20 +1,26 @@
 #!/bin/bash
 
-# Setup LXC Keepalive script and systemd service interactively
-
-KEEPALIVE_PATH="/usr/local/bin/lxc_keepalive.sh"
+# Setup variables
+CONFIG_DIR="/etc/lxc_keepalive"
+CONFIG_FILE="$CONFIG_DIR/lxc_keepalive.conf"
+SCRIPT_PATH="/usr/local/bin/lxc_keepalive.sh"
 SERVICE_PATH="/etc/systemd/system/lxc_keepalive.service"
 
-echo "Please enter the LXC container IDs you want to keep alive (separated by spaces):"
-read -r LXC_IDS
+# Prompt user for container IDs
+echo "Enter the LXC container IDs to keep alive (space separated):"
+read -r CONTAINER_IDS
 
-echo "Creating keepalive script at $KEEPALIVE_PATH..."
+# Create config directory and file
+mkdir -p "$CONFIG_DIR"
+echo "$CONTAINER_IDS" > "$CONFIG_FILE"
+echo "Config file created at $CONFIG_FILE with container IDs: $CONTAINER_IDS"
 
-cat > "$KEEPALIVE_PATH" << 'EOF'
+# Create the keepalive script
+cat > "$SCRIPT_PATH" << 'EOF'
 #!/bin/bash
 
+CONFIGFILE="/etc/lxc_keepalive/lxc_keepalive.conf"
 PIDFILE="/etc/lxc_keepalive/lxc_keepalive.pid"
-LXCFILE="/etc/lxc_keepalive/lxc_keepalive.list"
 
 function start_monitoring() {
   if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
@@ -22,33 +28,33 @@ function start_monitoring() {
     exit 1
   fi
 
-  if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 start <LXC_ID1> <LXC_ID2> ..."
+  if [ ! -f "$CONFIGFILE" ]; then
+    echo "Configuration file $CONFIGFILE not found!"
     exit 1
   fi
 
-  LXC_LIST=("${@:2}")
-  mkdir -p /etc/lxc_keepalive
-  echo "${LXC_LIST[@]}" > "$LXCFILE"
+  read -r -a LXC_LIST < "$CONFIGFILE"
+  if [ ${#LXC_LIST[@]} -eq 0 ]; then
+    echo "No container IDs found in $CONFIGFILE"
+    exit 1
+  fi
 
-  ( 
-    while true; do
-      for LXC_ID in "${LXC_LIST[@]}"; do
-        STATUS=$(pct status $LXC_ID 2>/dev/null | grep status | awk '{print $2}')
-        if [ "$STATUS" != "running" ]; then
-          echo "$(date): Container $LXC_ID is not running. Starting it..."
-          pct start $LXC_ID
-        else
-          echo "$(date): Container $LXC_ID is running fine."
-        fi
-      done
-      sleep 60
-    done
-  ) &
-
-  echo $! > "$PIDFILE"
-  echo "Keepalive started with PID $(cat $PIDFILE)"
+  echo $$ > "$PIDFILE"
+  echo "Keepalive started with PID $$"
   echo "Monitoring containers: ${LXC_LIST[@]}"
+
+  while true; do
+    for LXC_ID in "${LXC_LIST[@]}"; do
+      STATUS=$(pct status "$LXC_ID" 2>/dev/null | grep status | awk '{print $2}')
+      if [ "$STATUS" != "running" ]; then
+        echo "$(date): Container $LXC_ID is not running. Starting it..."
+        pct start "$LXC_ID"
+      else
+        echo "$(date): Container $LXC_ID is running fine."
+      fi
+    done
+    sleep 60
+  done
 }
 
 function stop_monitoring() {
@@ -61,27 +67,26 @@ function stop_monitoring() {
   if kill -0 $PID 2>/dev/null; then
     kill $PID
     rm -f "$PIDFILE"
-    rm -f "$LXCFILE"
     echo "Keepalive stopped."
   else
-    echo "Process $PID not running. Removing stale PID and container list files."
-    rm -f "$PIDFILE" "$LXCFILE"
+    echo "Process $PID not running. Removing stale PID file."
+    rm -f "$PIDFILE"
   fi
 }
 
 function show_status() {
-  if [ ! -f "$LXCFILE" ]; then
-    echo "No containers are currently being kept alive."
-    exit 0
+  if [ ! -f "$CONFIGFILE" ]; then
+    echo "Configuration file not found at $CONFIGFILE"
+    exit 1
   fi
 
-  echo "Containers currently being kept alive:"
-  cat "$LXCFILE"
+  echo "Currently monitored containers (from $CONFIGFILE):"
+  cat "$CONFIGFILE"
 }
 
 case "$1" in
   start)
-    start_monitoring "$@"
+    start_monitoring
     ;;
   stop)
     stop_monitoring
@@ -90,17 +95,17 @@ case "$1" in
     show_status
     ;;
   *)
-    echo "Usage: $0 {start <LXC_IDs> | stop | status}"
+    echo "Usage: $0 {start|stop|status}"
+    echo "Monitored containers read from $CONFIGFILE"
     exit 1
     ;;
 esac
 EOF
 
-chmod +x "$KEEPALIVE_PATH"
-echo "Keepalive script created and made executable."
+chmod +x "$SCRIPT_PATH"
+echo "Keepalive script installed at $SCRIPT_PATH and made executable."
 
-echo "Creating systemd service at $SERVICE_PATH..."
-
+# Create the systemd service file
 cat > "$SERVICE_PATH" << EOF
 [Unit]
 Description=Proxmox LXC Keepalive Service
@@ -108,25 +113,25 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$KEEPALIVE_PATH start $LXC_IDS
-ExecStop=$KEEPALIVE_PATH stop
+ExecStart=$SCRIPT_PATH start
+ExecStop=$SCRIPT_PATH stop
 Restart=always
+RestartSec=10
 User=root
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=lxc_keepalive
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "Systemd service created."
+echo "Systemd service file created at $SERVICE_PATH."
 
-echo "Reloading systemd daemon..."
+# Reload systemd, enable and start the service
 systemctl daemon-reload
-
-echo "Enabling and starting lxc_keepalive.service..."
 systemctl enable lxc_keepalive.service
 systemctl start lxc_keepalive.service
 
-echo "Setup complete! The keepalive service is running for containers: $LXC_IDS"
-echo "To change containers, edit $SERVICE_PATH and run:"
-echo "  systemctl daemon-reload"
-echo "  systemctl restart lxc_keepalive.service"
+echo "Service lxc_keepalive started and enabled on boot."
+echo "Use 'systemctl status lxc_keepalive' and 'journalctl -u lxc_keepalive -f' for logs and status."
